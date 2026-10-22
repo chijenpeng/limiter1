@@ -7,10 +7,10 @@ True Peak ceilings, Auto Release, TPDF/RPDF dither and three noise-shaping setti
 independent plug-in identity (`com.c0dypeng.limiter1`, `Cdpg` / `Lim1`).
 
 - macOS Universal: AU and VST3, arm64 + x86_64.
-- Windows x64: VST3, built and tested natively by the release workflow; requires the
-  Microsoft Visual C++ x64 Redistributable.
+- Windows x64: VST3, built natively with MSVC on windows-2022; CTest 1/1 (limiter_test, 0 failures)
+  passed there. Requires the Microsoft Visual C++ x64 Redistributable.
 - macOS bundles are ad-hoc signed, not notarized. Windows builds are unsigned.
-- Checked before release: CTest 1/1 (limiter_test, 38 PASS lines, 0 failures, 25.9 s); editor snapshot rendered; AU and VST3 slices arm64 + x86_64; ad-hoc signatures, ZIP integrity and SHA-256 verified by the packaging script.
+- Checked before release: CTest 1/1 (limiter_test: 39 checks, 0 failures); editor snapshot rendered; AU and VST3 slices arm64 + x86_64; ad-hoc signatures, ZIP integrity and SHA-256 verified by the packaging script.
 
 Known limits: the True Peak ceiling holds for content below 0.45 × the sample rate; full-band
 content (Nyquist bursts) can reconstruct up to 1.15 dB over it in the worst test case. The Analog
