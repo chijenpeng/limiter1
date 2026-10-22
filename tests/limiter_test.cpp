@@ -111,7 +111,7 @@ double besselI0 (double v)
     next to samples above a quarter of the sample peak (where a true peak can be). */
 double referencePeak (const std::vector<float>& x, size_t from, bool everywhere = true)
 {
-    constexpr int phases = 16, half = 128;
+    static constexpr int phases = 16, half = 128;
     static const auto taps = []
     {
         std::vector<std::vector<double>> t ((size_t) phases - 1, std::vector<double> (2 * half));
