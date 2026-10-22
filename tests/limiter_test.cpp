@@ -532,62 +532,111 @@ void testAutoRelease()
     }
 }
 
+/** One random control change, drawn in a stated order. C++ leaves the evaluation order of function
+    arguments unspecified (clang draws left to right, MSVC right to left), so each draw is its own
+    statement and both orders are run on every compiler. */
+struct ControlDraw
+{
+    float threshold, ceiling;
+    bool link;
+};
+
+ControlDraw drawControls (std::mt19937& rng, bool rightToLeft)
+{
+    ControlDraw d {};
+    if (rightToLeft)
+    {
+        d.link = (rng() & 1) != 0;
+        d.ceiling = -(float) (rng() % 13);
+        d.threshold = -(float) (rng() % 25);
+    }
+    else
+    {
+        d.threshold = -(float) (rng() % 25);
+        d.ceiling = -(float) (rng() % 13);
+        d.link = (rng() & 1) != 0;
+    }
+    return d;
+}
+
+/** Largest one-sample change of the tone's gain, as a fraction of the highest gain within 2M + 2
+    samples either side. */
+double largestGainStep (double fs, bool changing, bool rightToLeft)
+{
+    const int m = (int) std::lround (0.5 * Limiter::kLookAheadSeconds * fs) + 1;
+    Params p = baseParams();
+    if (! changing)
+    {
+        p.thresholdDb = -24.0f;   // the fastest legitimate gain motion: deep limiting, 0.01 ms release
+        p.releaseMs = 0.01f;
+    }
+    auto l = makeLimiter (fs, p);
+    std::vector<float> x ((size_t) (2.0 * fs));
+    for (size_t i = 0; i < x.size(); ++i)
+        x[i] = (float) (0.7 * std::sin (2.0 * kPi * 150.0 * (double) i / fs));
+    auto a = x, b = x;
+    std::mt19937 rng (11);
+    LinkedControls link;
+    link.setRange (-30.0f, 0.0f);
+    link.reset (0.0f, 0.0f, false);
+    runStereo (l, a, b, 256, [&] (size_t s)
+    {
+        if (! changing || (s / 256) % 8 != 0)
+            return;
+        Params q = baseParams();
+        const ControlDraw d = drawControls (rng, rightToLeft);
+        const auto r = link.update (d.threshold, d.ceiling, d.link);
+        q.thresholdDb = r.thresholdDb;
+        q.ceilingDb = r.ceilingDb;
+        q.releaseMs = (float) std::pow (10.0, -2.0 + 5.0 * (double) (rng() % 100) / 99.0);
+        q.autoRelease = (rng() & 1) != 0;
+        q.domain = (Domain) (rng() % 3);
+        q.inputGainDbL = q.inputGainDbR = -(float) (rng() % 7);
+        l.setParams (q);
+    });
+    const size_t latency = (size_t) l.latencySamples();
+    std::vector<double> gain (a.size(), -1.0);   // negative: unresolvable near zero crossings
+    for (size_t n = latency; n < a.size(); ++n)
+        if (std::abs (x[n - latency]) >= 0.2)
+            gain[n] = a[n] / x[n - latency];
+    const size_t reach = (size_t) (2 * m + 2);
+    double step = 0.0;
+    for (size_t n = latency + 1; n < a.size(); ++n)
+    {
+        if (gain[n] < 0.0 || gain[n - 1] < 0.0)
+            continue;
+        double highest = 0.0;
+        for (size_t k = n > reach ? n - reach : 0; k < std::min (a.size(), n + reach + 1); ++k)
+            highest = std::max (highest, gain[k]);
+        step = std::max (step, std::abs (gain[n] - gain[n - 1]) / highest);
+    }
+    return step;
+}
+
 void testNoClicks()
 {
     std::printf ("No clicks: abrupt control changes over a steady tone\n");
-    double worst = 0.0, deepStatic = 0.0, bound = 0.0;
+    double worst[2] = { 0.0, 0.0 }, deepStatic = 0.0, bound = 0.0;
     for (double fs : kRates)
     {
         const int m = (int) std::lround (0.5 * Limiter::kLookAheadSeconds * fs) + 1;
-        // The two averages bound the limiter's own change to 1/M per sample; a 20 ms glide of a
-        // 24 dB threshold step adds (15.8 - 1) / (0.02 fs) in its first sample.
-        bound = std::max (bound, 1.0 / m + (fromDb (24.0) - 1.0) / (0.02 * fs));
-        for (int changing = 0; changing < 2; ++changing)
-        {
-            Params p = baseParams();
-            if (changing == 0)
-            {
-                p.thresholdDb = -24.0f;   // the fastest legitimate gain motion: deep limiting, 0.01 ms release
-                p.releaseMs = 0.01f;
-            }
-            auto l = makeLimiter (fs, p);
-            std::vector<float> x ((size_t) (2.0 * fs));
-            for (size_t i = 0; i < x.size(); ++i)
-                x[i] = (float) (0.7 * std::sin (2.0 * kPi * 150.0 * (double) i / fs));
-            auto a = x, b = x;
-            std::mt19937 rng (11);
-            LinkedControls link;
-            link.setRange (-30.0f, 0.0f);
-            link.reset (0.0f, 0.0f, false);
-            runStereo (l, a, b, 256, [&] (size_t s)
-            {
-                if (changing == 0 || (s / 256) % 8 != 0)
-                    return;
-                Params q = baseParams();
-                const auto r = link.update (-(float) (rng() % 25), -(float) (rng() % 13), (rng() & 1) != 0);
-                q.thresholdDb = r.thresholdDb;
-                q.ceilingDb = r.ceilingDb;
-                q.releaseMs = (float) std::pow (10.0, -2.0 + 5.0 * (double) (rng() % 100) / 99.0);
-                q.autoRelease = (rng() & 1) != 0;
-                q.domain = (Domain) (rng() % 3);
-                q.inputGainDbL = q.inputGainDbR = -(float) (rng() % 7);
-                l.setParams (q);
-            });
-            const size_t latency = (size_t) l.latencySamples();
-            double step = 0.0;
-            for (size_t n = latency + 1; n < a.size(); ++n)
-            {
-                const double xa = x[n - latency], xb = x[n - 1 - latency];
-                if (std::abs (xa) < 0.2 || std::abs (xb) < 0.2)
-                    continue;   // gain unresolvable near zero crossings
-                const double ga = a[n] / xa, gb = a[n - 1] / xb;
-                step = std::max (step, std::abs (ga - gb) / std::max (ga, gb));
-            }
-            (changing ? worst : deepStatic) = std::max (changing ? worst : deepStatic, step);
-        }
+        // The gain is measured as a fraction of the highest gain within 2M + 2 samples (a step is
+        // judged against the level it moves towards, not the near-silent level it leaves: a
+        // 25 dB release from deep limiting is one step of 1.0 against 0.06). The limiter's own
+        // gain is the hold's step response through two moving averages of length M: at most 1/M of
+        // the step per sample. The input, threshold and ceiling gains glide for 20 ms, and the
+        // output carries their product, whose relative change per sample is the sum of theirs:
+        // each starts at most (R - 1) / (0.02 fs) after a jump of ratio R, which is 24 dB for the
+        // threshold and, through Link, for the ceiling, and 6 dB for the input gain.
+        bound = std::max (bound, 1.0 / m + (2.0 * (fromDb (24.0) - 1.0) + (fromDb (6.0) - 1.0)) / (0.02 * fs));
+        deepStatic = std::max (deepStatic, largestGainStep (fs, false, false));
+        for (int order = 0; order < 2; ++order)
+            worst[order] = std::max (worst[order], largestGainStep (fs, true, order != 0));
     }
-    check (worst <= bound, fmt ("threshold, ceiling, link, release, auto, domain and input gain changed every 43-87 ms: largest one-sample gain change %.2f %% (bound %.2f %%; static deep limiting at 0.01 ms release: %.2f %%)",
-                                100.0 * worst, 100.0 * bound, 100.0 * deepStatic));
+    const char* names[2] = { "left to right", "right to left" };
+    for (int order = 0; order < 2; ++order)
+        check (worst[order] <= bound, fmt ("threshold, ceiling, link, release, auto, domain and input gain changed every 43-87 ms, drawn %s: largest one-sample gain change %.2f %% (bound %.2f %%; static deep limiting at 0.01 ms release: %.2f %%)",
+                                           names[order], 100.0 * worst[order], 100.0 * bound, 100.0 * deepStatic));
 }
 
 //==============================================================================
