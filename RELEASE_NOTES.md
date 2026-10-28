@@ -9,7 +9,7 @@
   keep their setting.
 - Checked before release: CTest 1/1 (limiter_test passed); editor snapshot rendered to
   docs/editor.png and checked; AU and VST3 slices arm64 + x86_64 (lipo).
-- Windows x64: result pending.
+- Windows x64: VST3 built natively with MSVC on windows-2022; CTest 1/1 (limiter_test, 0 failures) passed there. Requires the Microsoft Visual C++ x64 Redistributable.
 
 ## v0.1.0
 
