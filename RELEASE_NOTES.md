@@ -1,5 +1,16 @@
 # Limiter1 release notes
 
+## v0.1.1
+
+- Meters: the Attenuation meter and the input/output peak meters now show every peak and reduction
+  between two screen refreshes; before, a short event between refreshes could be missed by the
+  display. Audio is unchanged.
+- Link between Threshold and Out Ceiling is now on by default for new instances; saved sessions
+  keep their setting.
+- Checked before release: CTest 1/1 (limiter_test passed); editor snapshot rendered to
+  docs/editor.png and checked; AU and VST3 slices arm64 + x86_64 (lipo).
+- Windows x64: result pending.
+
 ## v0.1.0
 
 Limiter1 is a look-ahead brickwall peak limiter with an output re-quantizer: Digital, Analog and

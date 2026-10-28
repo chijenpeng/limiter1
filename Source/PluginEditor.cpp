@@ -491,12 +491,12 @@ LimiterSurface::LimiterSurface (Limiter1Processor& p)
       threshold (p.apvts, ParamID::threshold, "Threshold", "Peaks above this are limited. Everything below gets a constant gain of Ceiling minus Threshold, "
                                                            "so pulling it down below the input peaks raises the level."),
       ceiling (p.apvts, ParamID::ceiling, "Out Ceiling", "The highest level that leaves the plug-in. -0.3 to -0.5 dB is the usual choice for delivery."),
-      inMeterL (Meter::Kind::peak, [&p] { return toDb (p.inputPeakL.load()); }, "Input peaks", kInputMeterHelp),
-      inMeterR (Meter::Kind::peak, [&p] { return toDb (p.inputPeakR.load()); }, "Input peaks", kInputMeterHelp),
-      reduction (Meter::Kind::reduction, [&p] { return p.gainReductionDb.load(); }, "Attenuation",
+      inMeterL (Meter::Kind::peak, [&p] { return toDb (p.inputPeakL.exchange (0.0f)); }, "Input peaks", kInputMeterHelp),
+      inMeterR (Meter::Kind::peak, [&p] { return toDb (p.inputPeakR.exchange (0.0f)); }, "Input peaks", kInputMeterHelp),
+      reduction (Meter::Kind::reduction, [&p] { return p.gainReductionDb.exchange (0.0f); }, "Attenuation",
                  "How much the limiter is turning the signal down right now, with a 1.5 s hold on the deepest reduction."),
-      outMeterL (Meter::Kind::peak, [&p] { return toDb (p.outputPeakL.load()); }, "Output peaks", kOutputMeterHelp),
-      outMeterR (Meter::Kind::peak, [&p] { return toDb (p.outputPeakR.load()); }, "Output peaks", kOutputMeterHelp),
+      outMeterL (Meter::Kind::peak, [&p] { return toDb (p.outputPeakL.exchange (0.0f)); }, "Output peaks", kOutputMeterHelp),
+      outMeterR (Meter::Kind::peak, [&p] { return toDb (p.outputPeakR.exchange (0.0f)); }, "Output peaks", kOutputMeterHelp),
       inputLink (*p.apvts.getParameter (ParamID::inputLink), "Link", "Moves Input L and Input R together, keeping their offset. The two values are what is stored."),
       link (*p.apvts.getParameter (ParamID::link), "Link", "Moves Threshold and Out Ceiling together by the same number of dB. Turning it on never changes the sound."),
       release (p.apvts, ParamID::release, "Release", "How fast the gain recovers after a peak; about 95 % of the recovery is done in three times this. "

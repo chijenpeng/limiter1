@@ -47,7 +47,8 @@ public:
     // For the UI
     juce::AudioProcessorValueTreeState apvts;
 
-    /** Block maxima, linear (0..1) and dB of reduction; raw, no ballistics. */
+    /** Maxima since the editor last read them, linear (0..1) and dB of reduction; raw, no ballistics.
+        The processor only raises them (storeMax); the editor exchanges them to 0 on each read. */
     std::atomic<float> inputPeakL { 0.0f }, inputPeakR { 0.0f }, outputPeakL { 0.0f }, outputPeakR { 0.0f }, gainReductionDb { 0.0f };
     /** What the limiter is actually using after the Link coupling (equal to the parameters
         except for the block or two before a coupled write-back lands). */

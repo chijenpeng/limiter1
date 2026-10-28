@@ -57,13 +57,33 @@ int main (int argc, char** argv)
     Limiter1Editor editor (limiter);
     editor.setSize (juce::roundToInt (LimiterSurface::kWidth * editorScale), juce::roundToInt (LimiterSurface::kHeight * editorScale));
 
+    // The meters hold the maximum since the last editor read, so clear them before each block:
+    // afterwards they hold exactly the last block, which is what the snapshot shows.
+    const auto clearMeters = [&limiter]
+    {
+        limiter.inputPeakL.store (0.0f);  limiter.inputPeakR.store (0.0f);
+        limiter.outputPeakL.store (0.0f); limiter.outputPeakR.store (0.0f);
+        limiter.gainReductionDb.store (0.0f);
+    };
     for (int pos = 0; pos + block <= length; pos += block)
     {
+        clearMeters();
         juce::AudioBuffer<float> chunk (audio.getArrayOfWritePointers(), 2, pos, block);
         processor->processBlock (chunk, midi);
     }
 
-    juce::MessageManager::getInstance()->runDispatchLoopUntil (150);   // let the editor's timer read the meters
+    const float shownInL = limiter.inputPeakL.load(), shownInR = limiter.inputPeakR.load();
+    const float shownOutL = limiter.outputPeakL.load(), shownOutR = limiter.outputPeakR.load();
+    const float shownReduction = limiter.gainReductionDb.load();
+    // The editor's timer exchanges the meters to 0 on each read, so re-store the last block
+    // before every short dispatch slice (ticks are 33 ms apart, slices 10 ms): each read sees it.
+    for (int slice = 0; slice < 15; ++slice)
+    {
+        limiter.inputPeakL.store (shownInL);   limiter.inputPeakR.store (shownInR);
+        limiter.outputPeakL.store (shownOutL); limiter.outputPeakR.store (shownOutR);
+        limiter.gainReductionDb.store (shownReduction);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+    }
     const auto image = editor.createComponentSnapshot (editor.getLocalBounds(), true, pixelScale);
     output.deleteFile();
     juce::FileOutputStream out (output);

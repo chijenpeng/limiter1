@@ -8,6 +8,13 @@ namespace
     const juce::Identifier versionId ("version");
     constexpr int kStateVersion = 1;
 
+    /** Holds the largest value seen since the editor last read it (the editor exchanges it to 0). */
+    void storeMax (std::atomic<float>& target, float value) noexcept
+    {
+        auto current = target.load (std::memory_order_relaxed);
+        while (value > current && ! target.compare_exchange_weak (current, value, std::memory_order_relaxed)) {}
+    }
+
     juce::AudioParameterFloatAttributes dbAttributes()
     {
         return juce::AudioParameterFloatAttributes().withLabel ("dB").withStringFromValueFunction (
@@ -43,7 +50,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Limiter1Processor::createLay
     layout.add (std::make_unique<Choice> (juce::ParameterID { ParamID::quantize, 1 }, "Quantize", juce::StringArray { "None", "8 bit", "12 bit", "16 bit", "20 bit", "24 bit" }, 5));
     layout.add (std::make_unique<Choice> (juce::ParameterID { ParamID::dither, 1 }, "Dither", juce::StringArray { "None", "Type 1", "Type 2" }, 1));
     layout.add (std::make_unique<Choice> (juce::ParameterID { ParamID::shaping, 1 }, "Shaping", juce::StringArray { "None", "Moderate", "Normal", "Ultra" }, 2));
-    layout.add (std::make_unique<Bool> (juce::ParameterID { ParamID::link, 1 }, "Link Threshold and Ceiling", false));
+    layout.add (std::make_unique<Bool> (juce::ParameterID { ParamID::link, 1 }, "Link Threshold and Ceiling", true));
     layout.add (std::make_unique<Bool> (juce::ParameterID { ParamID::inputLink, 1 }, "Link Inputs", true));
     return layout;
 }
@@ -112,11 +119,11 @@ void Limiter1Processor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     limiter.process (buffer.getArrayOfWritePointers(), numChannels, buffer.getNumSamples());
 
     const auto& m = limiter.meters();
-    inputPeakL.store (m.inputPeak[0]);
-    inputPeakR.store (numChannels > 1 ? m.inputPeak[1] : m.inputPeak[0]);
-    outputPeakL.store (m.outputPeak[0]);
-    outputPeakR.store (numChannels > 1 ? m.outputPeak[1] : m.outputPeak[0]);
-    gainReductionDb.store (m.gainReductionDb);
+    storeMax (inputPeakL, m.inputPeak[0]);
+    storeMax (inputPeakR, numChannels > 1 ? m.inputPeak[1] : m.inputPeak[0]);
+    storeMax (outputPeakL, m.outputPeak[0]);
+    storeMax (outputPeakR, numChannels > 1 ? m.outputPeak[1] : m.outputPeak[0]);
+    storeMax (gainReductionDb, m.gainReductionDb);
 }
 
 void Limiter1Processor::writeBack (const char* id, std::atomic<float>& pending)
